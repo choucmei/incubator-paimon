@@ -301,7 +301,10 @@ public class SchemaManager implements Serializable {
                                                     update.newDataType()));
                                 }
                                 return new DataField(
-                                        field.id(), field.name(), update.newDataType());
+                                        field.id(),
+                                        field.name(),
+                                        update.newDataType(),
+                                        field.description());
                             });
                 } else if (change instanceof UpdateColumnNullability) {
                     UpdateColumnNullability update = (UpdateColumnNullability) change;
@@ -381,6 +384,24 @@ public class SchemaManager implements Serializable {
                 }
             } catch (Exception e) {
                 throw new RuntimeException(e);
+            }
+        }
+    }
+
+    public boolean mergeSchema(RowType rowType, boolean allowExplicitCast) {
+        TableSchema current =
+                latest().orElseThrow(
+                                () ->
+                                        new RuntimeException(
+                                                "It requires that the current schema to exist when calling 'mergeSchema'"));
+        TableSchema update = SchemaMergingUtils.mergeSchemas(current, rowType, allowExplicitCast);
+        if (current.equals(update)) {
+            return false;
+        } else {
+            try {
+                return commit(update);
+            } catch (Exception e) {
+                throw new RuntimeException("Failed to commit the schema.", e);
             }
         }
     }

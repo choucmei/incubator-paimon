@@ -16,4 +16,33 @@
  * limitations under the License.
  */
 
-{"data":null,"database":"paimon_sync_table","es":1683880505000,"id":2145,"isDdl":true,"mysqlType":null,"old":null,"pkNames":null,"sql":"/* Query from DMS-WEBSQL-0-Qid_30150719072766844D by user 1486767996652600 */ ALTER TABLE all_types_table ADD COLUMN v INT","sqlType":null,"table":"all_types_table","ts":1683880506421,"type":"ALTER"}
+package org.apache.paimon.flink.sink.index;
+
+/** Type of record, key or full row. */
+public enum KeyPartOrRow {
+    KEY_PART,
+    ROW;
+
+    public byte toByteValue() {
+        switch (this) {
+            case KEY_PART:
+                return 0;
+            case ROW:
+                return 1;
+            default:
+                throw new UnsupportedOperationException("Unsupported value: " + this);
+        }
+    }
+
+    public static KeyPartOrRow fromByteValue(byte value) {
+        switch (value) {
+            case 0:
+                return KEY_PART;
+            case 1:
+                return ROW;
+            default:
+                throw new UnsupportedOperationException(
+                        "Unsupported byte value '" + value + "' for row kind.");
+        }
+    }
+}

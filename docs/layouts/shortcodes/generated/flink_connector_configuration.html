@@ -117,6 +117,18 @@ under the License.
             <td>If true, flink sink will use managed memory for merge tree; otherwise, it will create an independent memory allocator.</td>
         </tr>
         <tr>
+            <td><h5>source.checkpoint-align.enabled</h5></td>
+            <td style="word-wrap: break-word;">false</td>
+            <td>Boolean</td>
+            <td>Whether to align the flink checkpoint with the snapshot of the paimon table, If true, a checkpoint will only be made if a snapshot is consumed.</td>
+        </tr>
+        <tr>
+            <td><h5>source.checkpoint-align.timeout</h5></td>
+            <td style="word-wrap: break-word;">30 s</td>
+            <td>Duration</td>
+            <td>If the new snapshot has not been generated when the checkpoint starts to trigger, the enumerator will block the checkpoint and wait for the new snapshot. Set the maximum waiting time to avoid infinite waiting, if timeout, the checkpoint will fail. Note that it should be set smaller than the checkpoint timeout.</td>
+        </tr>
+        <tr>
             <td><h5>unaware-bucket.compaction.parallelism</h5></td>
             <td style="word-wrap: break-word;">(none)</td>
             <td>Integer</td>

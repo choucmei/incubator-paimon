@@ -19,10 +19,7 @@
 package org.apache.paimon.flink.action.cdc.kafka;
 
 import org.apache.paimon.catalog.Catalog;
-import org.apache.paimon.catalog.CatalogContext;
-import org.apache.paimon.catalog.CatalogFactory;
 import org.apache.paimon.catalog.Identifier;
-import org.apache.paimon.fs.Path;
 import org.apache.paimon.schema.Schema;
 import org.apache.paimon.table.FileStoreTable;
 import org.apache.paimon.types.DataType;
@@ -48,7 +45,7 @@ import java.util.UUID;
 import java.util.concurrent.ThreadLocalRandom;
 
 import static org.assertj.core.api.Assertions.assertThat;
-import static org.junit.jupiter.api.Assertions.assertThrows;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 /** IT cases for {@link KafkaSyncDatabaseAction}. */
 public class KafkaCanalSyncDatabaseActionITCase extends KafkaActionITCaseBase {
@@ -107,7 +104,7 @@ public class KafkaCanalSyncDatabaseActionITCase extends KafkaActionITCaseBase {
     }
 
     @Test
-    // @Timeout(60)
+    @Timeout(60)
     public void testSchemaEvolutionOneTopic() throws Exception {
 
         final String topic = "schema_evolution";
@@ -293,19 +290,16 @@ public class KafkaCanalSyncDatabaseActionITCase extends KafkaActionITCaseBase {
                         Collections.emptyMap(),
                         Collections.emptyMap());
 
-        IllegalArgumentException e =
-                assertThrows(
-                        IllegalArgumentException.class,
-                        () -> action.build(env),
-                        "Expecting IllegalArgumentException");
-        assertThat(e).hasMessage("topic cannot be null.");
+        assertThatThrownBy(() -> action.build(env))
+                .isInstanceOf(IllegalArgumentException.class)
+                .hasMessage("kafka-conf [topic] must be specified.");
     }
 
     @Test
     @Timeout(60)
     public void testTableAffixMultiTopic() throws Exception {
         // create table t1
-        Catalog catalog = CatalogFactory.createCatalog(CatalogContext.create(new Path(warehouse)));
+        Catalog catalog = catalog();
         catalog.createDatabase(database, true);
         Identifier identifier = Identifier.create(database, "test_prefix_t1_test_suffix");
         Schema schema =
@@ -377,7 +371,7 @@ public class KafkaCanalSyncDatabaseActionITCase extends KafkaActionITCaseBase {
     @Timeout(60)
     public void testTableAffixOneTopic() throws Exception {
         // create table t1
-        Catalog catalog = CatalogFactory.createCatalog(CatalogContext.create(new Path(warehouse)));
+        Catalog catalog = catalog();
         catalog.createDatabase(database, true);
         Identifier identifier = Identifier.create(database, "test_prefix_t1_test_suffix");
         Schema schema =

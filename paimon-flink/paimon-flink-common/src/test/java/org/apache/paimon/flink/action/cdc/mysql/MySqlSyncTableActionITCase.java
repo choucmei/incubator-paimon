@@ -18,11 +18,6 @@
 
 package org.apache.paimon.flink.action.cdc.mysql;
 
-import org.apache.paimon.catalog.Catalog;
-import org.apache.paimon.catalog.CatalogContext;
-import org.apache.paimon.catalog.CatalogFactory;
-import org.apache.paimon.catalog.Identifier;
-import org.apache.paimon.fs.Path;
 import org.apache.paimon.options.CatalogOptions;
 import org.apache.paimon.schema.SchemaChange;
 import org.apache.paimon.schema.SchemaManager;
@@ -36,11 +31,10 @@ import org.apache.paimon.utils.JsonSerdeUtil;
 import org.apache.flink.api.common.restartstrategy.RestartStrategies;
 import org.apache.flink.core.execution.JobClient;
 import org.apache.flink.streaming.api.environment.StreamExecutionEnvironment;
+import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.Timeout;
 
-import java.sql.Connection;
-import java.sql.DriverManager;
 import java.sql.Statement;
 import java.util.ArrayList;
 import java.util.Arrays;
@@ -51,13 +45,18 @@ import java.util.Map;
 import java.util.stream.Collectors;
 
 import static org.assertj.core.api.Assertions.assertThat;
-import static org.junit.jupiter.api.Assertions.assertEquals;
-import static org.junit.jupiter.api.Assertions.assertThrows;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 /** IT cases for {@link MySqlSyncTableAction}. */
 public class MySqlSyncTableActionITCase extends MySqlActionITCaseBase {
 
     private static final String DATABASE_NAME = "paimon_sync_table";
+
+    @BeforeAll
+    public static void startContainers() {
+        MYSQL_CONTAINER.withSetupSQL("mysql/sync_table_setup.sql");
+        start();
+    }
 
     @Test
     @Timeout(60)
@@ -90,14 +89,8 @@ public class MySqlSyncTableActionITCase extends MySqlActionITCaseBase {
         checkTableSchema(
                 "[{\"id\":0,\"name\":\"pt\",\"type\":\"INT NOT NULL\",\"description\":\"primary\"},{\"id\":1,\"name\":\"_id\",\"type\":\"INT NOT NULL\",\"description\":\"_id\"},{\"id\":2,\"name\":\"v1\",\"type\":\"VARCHAR(10)\",\"description\":\"v1\"}]");
 
-        try (Connection conn =
-                DriverManager.getConnection(
-                        MYSQL_CONTAINER.getJdbcUrl(DATABASE_NAME),
-                        MYSQL_CONTAINER.getUsername(),
-                        MYSQL_CONTAINER.getPassword())) {
-            try (Statement statement = conn.createStatement()) {
-                testSchemaEvolutionImpl(statement);
-            }
+        try (Statement statement = getStatement()) {
+            testSchemaEvolutionImpl(statement);
         }
     }
 
@@ -105,12 +98,12 @@ public class MySqlSyncTableActionITCase extends MySqlActionITCaseBase {
 
         FileStoreTable table = getFileStoreTable();
 
-        assertEquals(excepted, JsonSerdeUtil.toFlatJson(table.schema().fields()));
+        assertThat(JsonSerdeUtil.toFlatJson(table.schema().fields())).isEqualTo(excepted);
     }
 
     private void testSchemaEvolutionImpl(Statement statement) throws Exception {
         FileStoreTable table = getFileStoreTable();
-        statement.executeUpdate("USE paimon_sync_table");
+        statement.executeUpdate("USE " + DATABASE_NAME);
 
         statement.executeUpdate("INSERT INTO schema_evolution_1 VALUES (1, 1, 'one')");
         statement.executeUpdate(
@@ -281,20 +274,14 @@ public class MySqlSyncTableActionITCase extends MySqlActionITCaseBase {
         checkTableSchema(
                 "[{\"id\":0,\"name\":\"_id\",\"type\":\"INT NOT NULL\",\"description\":\"primary\"},{\"id\":1,\"name\":\"v1\",\"type\":\"VARCHAR(10)\",\"description\":\"v1\"},{\"id\":2,\"name\":\"v2\",\"type\":\"INT\",\"description\":\"v2\"},{\"id\":3,\"name\":\"v3\",\"type\":\"VARCHAR(10)\",\"description\":\"v3\"}]");
 
-        try (Connection conn =
-                DriverManager.getConnection(
-                        MYSQL_CONTAINER.getJdbcUrl(DATABASE_NAME),
-                        MYSQL_CONTAINER.getUsername(),
-                        MYSQL_CONTAINER.getPassword())) {
-            try (Statement statement = conn.createStatement()) {
-                testSchemaEvolutionMultipleImpl(statement);
-            }
+        try (Statement statement = getStatement()) {
+            testSchemaEvolutionMultipleImpl(statement);
         }
     }
 
     private void testSchemaEvolutionMultipleImpl(Statement statement) throws Exception {
         FileStoreTable table = getFileStoreTable();
-        statement.executeUpdate("USE paimon_sync_table");
+        statement.executeUpdate("USE " + DATABASE_NAME);
 
         statement.executeUpdate(
                 "INSERT INTO schema_evolution_multiple VALUES (1, 'one', 10, 'string_1')");
@@ -376,14 +363,8 @@ public class MySqlSyncTableActionITCase extends MySqlActionITCaseBase {
         JobClient client = env.executeAsync();
         waitJobRunning(client);
 
-        try (Connection conn =
-                DriverManager.getConnection(
-                        MYSQL_CONTAINER.getJdbcUrl(DATABASE_NAME),
-                        MYSQL_CONTAINER.getUsername(),
-                        MYSQL_CONTAINER.getPassword())) {
-            try (Statement statement = conn.createStatement()) {
-                testAllTypesImpl(statement);
-            }
+        try (Statement statement = getStatement()) {
+            testAllTypesImpl(statement);
         }
 
         client.cancel().get();
@@ -631,6 +612,7 @@ public class MySqlSyncTableActionITCase extends MySqlActionITCaseBase {
 
         // test all types during schema evolution
         try {
+            statement.executeUpdate("USE " + DATABASE_NAME);
             statement.executeUpdate("ALTER TABLE all_types_table ADD COLUMN v INT");
             List<DataField> newFields = new ArrayList<>(rowType.getFields());
             newFields.add(new DataField(rowType.getFieldCount(), "v", DataTypes.INT()));
@@ -665,12 +647,8 @@ public class MySqlSyncTableActionITCase extends MySqlActionITCaseBase {
                         Collections.emptyMap(),
                         Collections.emptyMap());
 
-        IllegalArgumentException e =
-                assertThrows(
-                        IllegalArgumentException.class,
-                        () -> action.build(env),
-                        "Expecting IllegalArgumentException");
-        assertThat(e)
+        assertThatThrownBy(() -> action.build(env))
+                .isInstanceOf(IllegalArgumentException.class)
                 .hasMessage(
                         "Column v1 have different types in table "
                                 + DATABASE_NAME
@@ -705,12 +683,9 @@ public class MySqlSyncTableActionITCase extends MySqlActionITCaseBase {
                         Collections.emptyMap(),
                         Collections.emptyMap());
 
-        IllegalArgumentException e =
-                assertThrows(
-                        IllegalArgumentException.class,
-                        () -> action.build(env),
-                        "Expecting IllegalArgumentException");
-        assertThat(e).hasMessageContaining("Paimon schema and MySQL schema are not compatible.");
+        assertThatThrownBy(() -> action.build(env))
+                .isInstanceOf(IllegalArgumentException.class)
+                .hasMessageContaining("Paimon schema and MySQL schema are not compatible.");
     }
 
     @Test
@@ -731,12 +706,8 @@ public class MySqlSyncTableActionITCase extends MySqlActionITCaseBase {
                         Collections.emptyMap(),
                         Collections.emptyMap());
 
-        IllegalArgumentException e =
-                assertThrows(
-                        IllegalArgumentException.class,
-                        () -> action.build(env),
-                        "Expecting IllegalArgumentException");
-        assertThat(e)
+        assertThatThrownBy(() -> action.build(env))
+                .isInstanceOf(IllegalArgumentException.class)
                 .hasMessage(
                         "Specified primary key pk does not exist in MySQL tables or computed columns.");
     }
@@ -759,12 +730,8 @@ public class MySqlSyncTableActionITCase extends MySqlActionITCaseBase {
                         Collections.emptyMap(),
                         Collections.emptyMap());
 
-        IllegalArgumentException e =
-                assertThrows(
-                        IllegalArgumentException.class,
-                        () -> action.build(env),
-                        "Expecting IllegalArgumentException");
-        assertThat(e)
+        assertThatThrownBy(() -> action.build(env))
+                .isInstanceOf(IllegalArgumentException.class)
                 .hasMessage(
                         "Primary keys are not specified. "
                                 + "Also, can't infer primary keys from MySQL table schemas because "
@@ -772,8 +739,16 @@ public class MySqlSyncTableActionITCase extends MySqlActionITCaseBase {
     }
 
     @Test
-    @Timeout(30)
+    @Timeout(60)
     public void testComputedColumn() throws Exception {
+        // the first round checks for table creation
+        // the second round checks for running the action on an existing table
+        for (int i = 0; i < 2; i++) {
+            innerTestComputedColumn(i == 0);
+        }
+    }
+
+    private void innerTestComputedColumn(boolean executeMysql) throws Exception {
         Map<String, String> mySqlConfig = getBasicMySqlConfig();
         mySqlConfig.put("database-name", DATABASE_NAME);
         mySqlConfig.put("table-name", "test_computed_column");
@@ -816,69 +791,66 @@ public class MySqlSyncTableActionITCase extends MySqlActionITCaseBase {
         JobClient client = env.executeAsync();
         waitJobRunning(client);
 
-        try (Connection conn =
-                        DriverManager.getConnection(
-                                MYSQL_CONTAINER.getJdbcUrl(DATABASE_NAME),
-                                MYSQL_CONTAINER.getUsername(),
-                                MYSQL_CONTAINER.getPassword());
-                Statement statement = conn.createStatement()) {
-            statement.execute("USE paimon_sync_table");
-            statement.executeUpdate(
-                    "INSERT INTO test_computed_column VALUES (1, '2023-03-23', '2022-01-01 14:30', '2021-09-15 15:00:10')");
-            statement.executeUpdate(
-                    "INSERT INTO test_computed_column VALUES (2, '2023-03-23', null, null)");
-
-            FileStoreTable table = getFileStoreTable();
-            RowType rowType =
-                    RowType.of(
-                            new DataType[] {
-                                DataTypes.INT().notNull(),
-                                DataTypes.DATE(),
-                                DataTypes.TIMESTAMP(0),
-                                DataTypes.TIMESTAMP(0),
-                                DataTypes.INT().notNull(),
-                                DataTypes.INT(),
-                                DataTypes.INT(),
-                                DataTypes.INT(),
-                                DataTypes.INT(),
-                                DataTypes.INT(),
-                                DataTypes.INT(),
-                                DataTypes.INT(),
-                                DataTypes.INT(),
-                                DataTypes.INT(),
-                                DataTypes.INT(),
-                                DataTypes.INT(),
-                                DataTypes.STRING(),
-                                DataTypes.STRING(),
-                                DataTypes.INT()
-                            },
-                            new String[] {
-                                "pk",
-                                "_date",
-                                "_datetime",
-                                "_timestamp",
-                                "_year_date",
-                                "_year_datetime",
-                                "_year_timestamp",
-                                "_month_date",
-                                "_month_datetime",
-                                "_month_timestamp",
-                                "_day_date",
-                                "_day_datetime",
-                                "_day_timestamp",
-                                "_hour_date",
-                                "_hour_datetime",
-                                "_hour_timestamp",
-                                "_substring_date1",
-                                "_substring_date2",
-                                "_truncate_date"
-                            });
-            List<String> expected =
-                    Arrays.asList(
-                            "+I[1, 19439, 2022-01-01T14:30, 2021-09-15T15:00:10, 2023, 2022, 2021, 3, 1, 9, 23, 1, 15, 0, 14, 15, 23-03-23, 09-15, 0]",
-                            "+I[2, 19439, NULL, NULL, 2023, NULL, NULL, 3, NULL, NULL, 23, NULL, NULL, 0, NULL, NULL, 23-03-23, NULL, 2]");
-            waitForResult(expected, table, rowType, Arrays.asList("pk", "_year_date"));
+        if (executeMysql) {
+            try (Statement statement = getStatement()) {
+                statement.execute("USE " + DATABASE_NAME);
+                statement.executeUpdate(
+                        "INSERT INTO test_computed_column VALUES (1, '2023-03-23', '2022-01-01 14:30', '2021-09-15 15:00:10')");
+                statement.executeUpdate(
+                        "INSERT INTO test_computed_column VALUES (2, '2023-03-23', null, null)");
+            }
         }
+
+        FileStoreTable table = getFileStoreTable();
+        RowType rowType =
+                RowType.of(
+                        new DataType[] {
+                            DataTypes.INT().notNull(),
+                            DataTypes.DATE(),
+                            DataTypes.TIMESTAMP(0),
+                            DataTypes.TIMESTAMP(0),
+                            DataTypes.INT().notNull(),
+                            DataTypes.INT(),
+                            DataTypes.INT(),
+                            DataTypes.INT(),
+                            DataTypes.INT(),
+                            DataTypes.INT(),
+                            DataTypes.INT(),
+                            DataTypes.INT(),
+                            DataTypes.INT(),
+                            DataTypes.INT(),
+                            DataTypes.INT(),
+                            DataTypes.INT(),
+                            DataTypes.STRING(),
+                            DataTypes.STRING(),
+                            DataTypes.INT()
+                        },
+                        new String[] {
+                            "pk",
+                            "_date",
+                            "_datetime",
+                            "_timestamp",
+                            "_year_date",
+                            "_year_datetime",
+                            "_year_timestamp",
+                            "_month_date",
+                            "_month_datetime",
+                            "_month_timestamp",
+                            "_day_date",
+                            "_day_datetime",
+                            "_day_timestamp",
+                            "_hour_date",
+                            "_hour_datetime",
+                            "_hour_timestamp",
+                            "_substring_date1",
+                            "_substring_date2",
+                            "_truncate_date"
+                        });
+        List<String> expected =
+                Arrays.asList(
+                        "+I[1, 19439, 2022-01-01T14:30, 2021-09-15T15:00:10, 2023, 2022, 2021, 3, 1, 9, 23, 1, 15, 0, 14, 15, 23-03-23, 09-15, 0]",
+                        "+I[2, 19439, NULL, NULL, 2023, NULL, NULL, 3, NULL, NULL, 23, NULL, NULL, 0, NULL, NULL, 23-03-23, NULL, 2]");
+        waitForResult(expected, table, rowType, Arrays.asList("pk", "_year_date"));
     }
 
     @Test
@@ -909,13 +881,8 @@ public class MySqlSyncTableActionITCase extends MySqlActionITCaseBase {
         JobClient client = env.executeAsync();
         waitJobRunning(client);
 
-        try (Connection conn =
-                        DriverManager.getConnection(
-                                MYSQL_CONTAINER.getJdbcUrl(DATABASE_NAME),
-                                MYSQL_CONTAINER.getUsername(),
-                                MYSQL_CONTAINER.getPassword());
-                Statement statement = conn.createStatement()) {
-            statement.execute("USE paimon_sync_table");
+        try (Statement statement = getStatement()) {
+            statement.execute("USE " + DATABASE_NAME);
             statement.executeUpdate(
                     "INSERT INTO test_tinyint1_convert VALUES (1, '2021-09-15 15:00:10', 21)");
             statement.executeUpdate(
@@ -933,7 +900,7 @@ public class MySqlSyncTableActionITCase extends MySqlActionITCaseBase {
             List<String> expected =
                     Arrays.asList(
                             "+I[1, 2021-09-15T15:00:10, 21]", "+I[2, 2023-03-23T16:00:20, 42]");
-            waitForResult(expected, table, rowType, Arrays.asList("pk"));
+            waitForResult(expected, table, rowType, Collections.singletonList("pk"));
         }
     }
 
@@ -969,14 +936,8 @@ public class MySqlSyncTableActionITCase extends MySqlActionITCaseBase {
         checkTableSchema(
                 "[{\"id\":0,\"name\":\"pt\",\"type\":\"INT NOT NULL\",\"description\":\"primary\"},{\"id\":1,\"name\":\"_id\",\"type\":\"INT NOT NULL\",\"description\":\"_id\"},{\"id\":2,\"name\":\"v1\",\"type\":\"VARCHAR(10)\",\"description\":\"v1\"}]");
 
-        try (Connection conn =
-                DriverManager.getConnection(
-                        MYSQL_CONTAINER.getJdbcUrl(DATABASE_NAME),
-                        MYSQL_CONTAINER.getUsername(),
-                        MYSQL_CONTAINER.getPassword())) {
-            try (Statement statement = conn.createStatement()) {
-                testSchemaEvolutionImplWithTinyIntConvert(statement);
-            }
+        try (Statement statement = getStatement()) {
+            testSchemaEvolutionImplWithTinyIntConvert(statement);
         }
     }
 
@@ -1021,9 +982,60 @@ public class MySqlSyncTableActionITCase extends MySqlActionITCaseBase {
         waitForResult(expected, table, rowType, primaryKeys);
     }
 
+    @Test
+    public void testSyncShards() throws Exception {
+        Map<String, String> mySqlConfig = getBasicMySqlConfig();
+        mySqlConfig.put("database-name", "shard_.+");
+        mySqlConfig.put("table-name", "t.+");
+
+        StreamExecutionEnvironment env = StreamExecutionEnvironment.getExecutionEnvironment();
+        env.setParallelism(2);
+        env.enableCheckpointing(1000);
+        env.setRestartStrategy(RestartStrategies.noRestart());
+
+        MySqlSyncTableAction action =
+                new MySqlSyncTableAction(
+                        mySqlConfig,
+                        warehouse,
+                        database,
+                        tableName,
+                        Collections.singletonList("pt"),
+                        Arrays.asList("pk", "pt"),
+                        Collections.singletonList("pt=substring(_date,5)"),
+                        Collections.emptyMap(),
+                        Collections.emptyMap());
+        action.build(env);
+        JobClient client = env.executeAsync();
+        waitJobRunning(client);
+
+        try (Statement statement = getStatement()) {
+            statement.execute("USE shard_1");
+            statement.executeUpdate("INSERT INTO t1 VALUES (1, '2023-07-30'), (2, '2023-07-30')");
+            statement.execute("USE shard_2");
+            statement.executeUpdate("INSERT INTO t1 VALUES (3, '2023-07-31'), (4, '2023-07-31')");
+        }
+
+        FileStoreTable table = getFileStoreTable();
+        RowType rowType =
+                RowType.of(
+                        new DataType[] {
+                            DataTypes.INT().notNull(),
+                            DataTypes.VARCHAR(10),
+                            DataTypes.STRING().notNull()
+                        },
+                        new String[] {"pk", "_date", "pt"});
+        waitForResult(
+                Arrays.asList(
+                        "+I[1, 2023-07-30, 07-30]",
+                        "+I[2, 2023-07-30, 07-30]",
+                        "+I[3, 2023-07-31, 07-31]",
+                        "+I[4, 2023-07-31, 07-31]"),
+                table,
+                rowType,
+                Arrays.asList("pk", "pt"));
+    }
+
     private FileStoreTable getFileStoreTable() throws Exception {
-        Catalog catalog = CatalogFactory.createCatalog(CatalogContext.create(new Path(warehouse)));
-        Identifier identifier = Identifier.create(database, tableName);
-        return (FileStoreTable) catalog.getTable(identifier);
+        return getFileStoreTable(tableName);
     }
 }

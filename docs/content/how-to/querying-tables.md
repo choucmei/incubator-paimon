@@ -116,6 +116,35 @@ SELECT * FROM t;
 
 {{< /tab >}}
 
+{{< tab "Hive" >}}
+
+Hive requires adding the following configuration parameters to the hive-site.xml file:
+```xml
+<!--This parameter is used to configure the whitelist of permissible configuration items allowed for use in SQL standard authorization mode.-->
+<property>
+  <name>hive.security.authorization.sqlstd.confwhitelist</name>
+  <value>mapred.*|hive.*|mapreduce.*|spark.*</value>
+</property>
+
+<!--This parameter is an additional configuration for hive.security.authorization.sqlstd.confwhitelist. It allows you to add other permissible configuration items to the existing whitelist.-->
+<property>
+ <name>hive.security.authorization.sqlstd.confwhitelist.append</name>
+  <value>mapred.*|hive.*|mapreduce.*|spark.*</value>
+</property>
+```
+
+```sql
+SET paimon.scan.timestamp-millis=1679486589444;
+SELECT * FROM t;
+SET paimon.scan.timestamp-millis=null;
+    
+-- read tag 'my-tag'
+set paimon.scan.tag-name=my-tag;
+SELECT * FROM t;
+set paimon.scan.tag-name=null;
+```
+{{< /tab >}}
+
 {{< /tabs >}}
 
 ### Batch Incremental
@@ -166,6 +195,14 @@ spark.read()
 
 {{< /tab >}}
 
+{{< tab "Hive" >}}
+```sql
+SET paimon.incremental-between='12,20';
+SELECT * FROM t;
+SET paimon.incremental-between=null;
+```
+{{< /tab >}}
+
 {{< /tabs >}}
 
 In Batch SQL, the `DELETE` records are not allowed to be returned, so records of `-D` will be dropped.
@@ -198,7 +235,7 @@ You can also do streaming read without the snapshot data, you can use `latest` s
 {{< tab "Flink" >}}
 ```sql
 -- Continuously reads latest changes without producing a snapshot at the beginning.
-SELECT * FROM t /*+ OPTIONS('scan.mode' = 'latest') */
+SELECT * FROM t /*+ OPTIONS('scan.mode' = 'latest') */;
 ```
 {{< /tab >}}
 {{< /tabs >}}
@@ -208,7 +245,7 @@ SELECT * FROM t /*+ OPTIONS('scan.mode' = 'latest') */
 If you only want to process data for today and beyond, you can do so with partitioned filters:
 
 ```sql
-SELECT * FROM t WHERE dt > '2023-06-26'
+SELECT * FROM t WHERE dt > '2023-06-26';
 ```
 
 If it's not a partitioned table, or you can't filter by partition, you can use Time travel's stream read.
@@ -253,6 +290,34 @@ NOTE: The consumer will prevent expiration of the snapshot. You can specify 'con
 lifetime of consumers.
 {{< /hint >}}
 
+You can reset a consumer with a given consumer ID and next snapshot ID.
+
+{{< hint info >}}
+First, you need to stop the streaming task using this consumer ID, and then execute the reset consumer action job.
+{{< /hint >}}
+
+{{< tabs "reset-consumer" >}}
+
+{{< tab "Flink" >}}
+
+Run the following command:
+
+```bash
+<FLINK_HOME>/bin/flink run \
+    /path/to/paimon-flink-action-{{< version >}}.jar \
+    reset-consumer \
+    --warehouse <warehouse-path> \
+    --database <database-name> \ 
+    --table <table-name> \
+    --consumer-id <consumer-id> \
+    --next-snapshot <next-snapshot-id> \
+    [--catalog-conf <paimon-catalog-conf> [--catalog-conf <paimon-catalog-conf> ...]]
+```
+
+{{< /tab >}}
+
+{{< /tabs >}}
+
 ## Query Optimization
 
 {{< label Batch >}}{{< label Streaming >}}
@@ -283,7 +348,7 @@ CREATE TABLE orders (
     order_id BIGINT,
     .....,
     PRIMARY KEY (catalog_id, order_id) NOT ENFORCED -- composite primary key
-)
+);
 ```
 
 The query obtains a good acceleration by specifying a range filter for

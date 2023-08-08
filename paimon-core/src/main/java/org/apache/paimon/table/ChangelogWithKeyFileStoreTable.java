@@ -20,6 +20,7 @@ package org.apache.paimon.table;
 
 import org.apache.paimon.CoreOptions;
 import org.apache.paimon.CoreOptions.ChangelogProducer;
+import org.apache.paimon.CoreOptions.SequenceAutoPadding;
 import org.apache.paimon.KeyValue;
 import org.apache.paimon.KeyValueFileStore;
 import org.apache.paimon.WriteMode;
@@ -28,11 +29,11 @@ import org.apache.paimon.fs.FileIO;
 import org.apache.paimon.fs.Path;
 import org.apache.paimon.manifest.ManifestCacheFilter;
 import org.apache.paimon.mergetree.compact.DeduplicateMergeFunction;
+import org.apache.paimon.mergetree.compact.FirstRowMergeFunction;
 import org.apache.paimon.mergetree.compact.LookupMergeFunction;
 import org.apache.paimon.mergetree.compact.MergeFunctionFactory;
 import org.apache.paimon.mergetree.compact.PartialUpdateMergeFunction;
 import org.apache.paimon.mergetree.compact.aggregate.AggregateMergeFunction;
-import org.apache.paimon.metastore.MetastoreClient;
 import org.apache.paimon.operation.FileStoreScan;
 import org.apache.paimon.operation.KeyValueFileStoreScan;
 import org.apache.paimon.operation.Lock;
@@ -51,8 +52,6 @@ import org.apache.paimon.table.source.ValueContentRowDataRecordIterator;
 import org.apache.paimon.types.DataField;
 import org.apache.paimon.types.RowType;
 
-import javax.annotation.Nullable;
-
 import java.util.List;
 import java.util.function.BiConsumer;
 import java.util.stream.Collectors;
@@ -70,22 +69,20 @@ public class ChangelogWithKeyFileStoreTable extends AbstractFileStoreTable {
     private transient KeyValueFileStore lazyStore;
 
     ChangelogWithKeyFileStoreTable(FileIO fileIO, Path path, TableSchema tableSchema) {
-        this(fileIO, path, tableSchema, Lock.emptyFactory(), null);
+        this(fileIO, path, tableSchema, new CatalogEnvironment(Lock.emptyFactory(), null, null));
     }
 
     ChangelogWithKeyFileStoreTable(
             FileIO fileIO,
             Path path,
             TableSchema tableSchema,
-            Lock.Factory lockFactory,
-            @Nullable MetastoreClient.Factory metastoreClientFactory) {
-        super(fileIO, path, tableSchema, lockFactory, metastoreClientFactory);
+            CatalogEnvironment catalogEnvironment) {
+        super(fileIO, path, tableSchema, catalogEnvironment);
     }
 
     @Override
     protected FileStoreTable copy(TableSchema newTableSchema) {
-        return new ChangelogWithKeyFileStoreTable(
-                fileIO, path, newTableSchema, lockFactory, metastoreClientFactory);
+        return new ChangelogWithKeyFileStoreTable(fileIO, path, newTableSchema, catalogEnvironment);
     }
 
     @Override
@@ -95,8 +92,9 @@ public class ChangelogWithKeyFileStoreTable extends AbstractFileStoreTable {
             Options conf = Options.fromMap(tableSchema.options());
             CoreOptions options = new CoreOptions(conf);
             CoreOptions.MergeEngine mergeEngine = options.mergeEngine();
-            MergeFunctionFactory<KeyValue> mfFactory;
             KeyValueFieldsExtractor extractor = ChangelogWithKeyKeyValueFieldsExtractor.EXTRACTOR;
+
+            MergeFunctionFactory<KeyValue> mfFactory;
 
             switch (mergeEngine) {
                 case DEDUPLICATE:
@@ -112,6 +110,11 @@ public class ChangelogWithKeyFileStoreTable extends AbstractFileStoreTable {
                                     tableSchema.fieldNames(),
                                     rowType.getFieldTypes(),
                                     tableSchema.primaryKeys());
+                    break;
+                case FIRST_ROW:
+                    mfFactory =
+                            FirstRowMergeFunction.factory(
+                                    new RowType(extractor.keyFields(tableSchema)), rowType);
                     break;
                 default:
                     throw new UnsupportedOperationException(
@@ -129,6 +132,7 @@ public class ChangelogWithKeyFileStoreTable extends AbstractFileStoreTable {
                             fileIO(),
                             schemaManager(),
                             tableSchema.id(),
+                            tableSchema.crossPartitionUpdate(),
                             options,
                             tableSchema.logicalPartitionType(),
                             addKeyNamePrefix(tableSchema.logicalBucketKeyType()),
@@ -245,8 +249,10 @@ public class ChangelogWithKeyFileStoreTable extends AbstractFileStoreTable {
                         .sequenceField()
                         .map(field -> new SequenceGenerator(field, schema().logicalRowType()))
                         .orElse(null);
-        final CoreOptions.SequenceAutoPadding sequenceAutoPadding =
-                store().options().sequenceAutoPadding();
+        final List<SequenceAutoPadding> sequenceAutoPadding =
+                store().options().sequenceAutoPadding().stream()
+                        .map(SequenceAutoPadding::fromString)
+                        .collect(Collectors.toList());
         final KeyValue kv = new KeyValue();
         return new TableWriteImpl<>(
                 store().newWrite(commitUser, manifestFilter),
@@ -255,7 +261,7 @@ public class ChangelogWithKeyFileStoreTable extends AbstractFileStoreTable {
                     long sequenceNumber =
                             sequenceGenerator == null
                                     ? KeyValue.UNKNOWN_SEQUENCE
-                                    : sequenceAutoPadding == CoreOptions.SequenceAutoPadding.NONE
+                                    : sequenceAutoPadding.isEmpty()
                                             ? sequenceGenerator.generate(record.row())
                                             : sequenceGenerator.generateWithPadding(
                                                     record.row(), sequenceAutoPadding);

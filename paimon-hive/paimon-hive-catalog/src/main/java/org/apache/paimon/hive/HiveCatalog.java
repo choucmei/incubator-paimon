@@ -171,6 +171,9 @@ public class HiveCatalog extends AbstractCatalog {
 
     @Override
     public boolean databaseExists(String databaseName) {
+        if (isSystemDatabase(databaseName)) {
+            return true;
+        }
         try {
             client.getDatabase(databaseName);
             return true;
@@ -185,6 +188,9 @@ public class HiveCatalog extends AbstractCatalog {
     @Override
     public void createDatabase(String name, boolean ignoreIfExists)
             throws DatabaseAlreadyExistException {
+        if (isSystemDatabase(name)) {
+            throw new ProcessSystemDatabaseException();
+        }
         try {
             client.createDatabase(convertToDatabase(name));
 
@@ -201,6 +207,9 @@ public class HiveCatalog extends AbstractCatalog {
     @Override
     public void dropDatabase(String name, boolean ignoreIfNotExists, boolean cascade)
             throws DatabaseNotExistException, DatabaseNotEmptyException {
+        if (isSystemDatabase(name)) {
+            throw new ProcessSystemDatabaseException();
+        }
         try {
             if (!cascade && client.getAllTables(name).size() > 0) {
                 throw new DatabaseNotEmptyException(name);
@@ -219,6 +228,9 @@ public class HiveCatalog extends AbstractCatalog {
 
     @Override
     public List<String> listTables(String databaseName) throws DatabaseNotExistException {
+        if (isSystemDatabase(databaseName)) {
+            return GLOBAL_TABLES;
+        }
         try {
             return client.getAllTables(databaseName).stream()
                     .filter(
@@ -228,7 +240,7 @@ public class HiveCatalog extends AbstractCatalog {
                                 // tables.
                                 // so we just check the schema file first
                                 return schemaFileExists(identifier)
-                                        && paimonTableExists(identifier, false);
+                                        && paimonTableExists(identifier);
                             })
                     .collect(Collectors.toList());
         } catch (UnknownDBException e) {
@@ -313,10 +325,10 @@ public class HiveCatalog extends AbstractCatalog {
                     e);
         }
         Table table = newHmsTable(identifier);
-        updateHmsTable(table, identifier, tableSchema);
         try {
+            updateHmsTable(table, identifier, tableSchema);
             client.createTable(table);
-        } catch (TException e) {
+        } catch (Exception e) {
             Path path = getDataTableLocation(identifier);
             try {
                 fileIO.deleteDirectoryQuietly(path);
@@ -381,7 +393,7 @@ public class HiveCatalog extends AbstractCatalog {
             Table table = client.getTable(identifier.getDatabaseName(), identifier.getObjectName());
             updateHmsTable(table, identifier, schema);
             client.alter_table(identifier.getDatabaseName(), identifier.getObjectName(), table);
-        } catch (TException te) {
+        } catch (Exception te) {
             schemaManager.deleteSchema(schema.id());
             throw new RuntimeException(te);
         }
@@ -528,19 +540,15 @@ public class HiveCatalog extends AbstractCatalog {
     private FieldSchema convertToFieldSchema(DataField dataField) {
         return new FieldSchema(
                 dataField.name(),
-                HiveTypeUtils.logicalTypeToTypeInfo(dataField.type()).getTypeName(),
+                HiveTypeUtils.toTypeInfo(dataField.type()).getTypeName(),
                 dataField.description());
-    }
-
-    private boolean paimonTableExists(Identifier identifier) {
-        return paimonTableExists(identifier, true);
     }
 
     private boolean schemaFileExists(Identifier identifier) {
         return new SchemaManager(fileIO, getDataTableLocation(identifier)).latest().isPresent();
     }
 
-    private boolean paimonTableExists(Identifier identifier, boolean throwException) {
+    private boolean paimonTableExists(Identifier identifier) {
         Table table;
         try {
             table = client.getTable(identifier.getDatabaseName(), identifier.getObjectName());
@@ -552,17 +560,7 @@ public class HiveCatalog extends AbstractCatalog {
                     e);
         }
 
-        boolean isPaimonTable = isPaimonTable(table) || LegacyHiveClasses.isPaimonTable(table);
-        if (!isPaimonTable && throwException) {
-            throw new IllegalArgumentException(
-                    "Table "
-                            + identifier.getFullName()
-                            + " is not a paimon table. It's input format is "
-                            + table.getSd().getInputFormat()
-                            + " and its output format is "
-                            + table.getSd().getOutputFormat());
-        }
-        return isPaimonTable;
+        return isPaimonTable(table) || LegacyHiveClasses.isPaimonTable(table);
     }
 
     private static boolean isPaimonTable(Table table) {

@@ -64,6 +64,20 @@ It is recommended that the parallelism of sink should be less than or equal to t
 
 ## Compaction
 
+### Asynchronous Compaction
+
+Compaction is inherently asynchronous, but if you want it to be completely asynchronous and not blocking writing,
+expect a mode to have maximum write throughput, the compaction can be done slowly and not in a hurry.
+You can use the following strategies for your table:
+
+```shell
+num-sorted-run.stop-trigger = 2147483647
+sort-spill-threshold = 10
+```
+
+This configuration will generate more files during peak write periods and gradually merge into optimal read
+performance during low write periods.
+
 ### Number of Sorted Runs to Pause Writing
 
 When number of sorted runs is small, Paimon writers will perform compaction asynchronously in separated threads, so
@@ -96,19 +110,6 @@ Write stalls will become less frequent when `num-sorted-run.stop-trigger` become
 performance. However, if this value becomes too large, more memory and CPU time will be needed when querying the
 table. If you are concerned about the OOM of memory, please configure the following option `sort-spill-threshold`.
 Its value depends on your memory size.
-
-### Prioritize write throughput
-
-If you expect a mode to have maximum write throughput, the compaction can be done slowly and not in a hurry.
-You can use the following strategies for your table:
-
-```shell
-num-sorted-run.stop-trigger = 2147483647
-sort-spill-threshold = 10
-```
-
-This configuration will generate more files during peak write periods and gradually merge into optimal read
-performance during low write periods.
 
 ### Number of Sorted Runs to Trigger Compaction
 
@@ -159,6 +160,18 @@ metadata.stats-mode = none
 The collection of statistical information for row storage is a bit expensive, so I suggest turning off statistical
 information as well.
 
+If you don't want to modify all files to Avro format, at least you can consider modifying the files in the previous
+layers to Avro format. You can use `'file.format.per.level' = '0:avro,1:avro'` to specify the files in the first two
+layers to be in Avro format.
+
+## File Compression
+
+By default, Paimon uses high-performance compression algorithms such as LZ4 and SNAPPY. But their compression rate
+will be not so good. If you can reduce the write/read performance, you can modify the compression algorithm:
+
+1. `'file.compression'`: Default file compression format. If you need a higher compression rate, I recommend using `'ZSTD'`.
+2. `'file.compression.per.level'`: Define different compression policies for different level. For example `'0:lz4,1:zstd'`.
+
 ## Stability
 
 If there are too few buckets, or too few resources, full-compaction may cause checkpoint to timeout, Flink's default
@@ -183,7 +196,7 @@ There are three main places in Paimon writer that takes up memory:
 * Writer's memory buffer, shared and preempted by all writers of a single task. This memory value can be adjusted by the `write-buffer-size` table property.
 * Memory consumed when merging several sorted runs for compaction. Can be adjusted by the `num-sorted-run.compaction-trigger` option to change the number of sorted runs to be merged.
 * If the row is very large, reading too many lines of data at once can consume a lot of memory when making a compaction. Reducing the `read.batch-size` option can alleviate the impact of this case.
-* The memory consumed by writing columnar (ORC, Parquet, etc.) file, which is not adjustable.
+* The memory consumed by writing columnar (ORC, Parquet, etc.) file. Decreasing the `orc.write.batch-size` option can reduce the consume of memory for ORC format.
 
 If your Flink job does not rely on state, please avoid using managed memory, which you can control with the following Flink parameters:
 ```shell

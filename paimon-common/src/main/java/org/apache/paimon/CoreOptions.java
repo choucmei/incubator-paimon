@@ -26,6 +26,7 @@ import org.apache.paimon.fs.Path;
 import org.apache.paimon.options.ConfigOption;
 import org.apache.paimon.options.MemorySize;
 import org.apache.paimon.options.Options;
+import org.apache.paimon.options.OptionsUtils;
 import org.apache.paimon.options.description.DescribedEnum;
 import org.apache.paimon.options.description.Description;
 import org.apache.paimon.options.description.InlineElement;
@@ -37,6 +38,7 @@ import java.lang.reflect.Field;
 import java.time.Duration;
 import java.util.ArrayList;
 import java.util.Arrays;
+import java.util.Collections;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
@@ -47,9 +49,11 @@ import java.util.stream.Collectors;
 
 import static org.apache.paimon.options.ConfigOptions.key;
 import static org.apache.paimon.options.description.TextElement.text;
+import static org.apache.paimon.utils.Preconditions.checkArgument;
 
 /** Core options for paimon. */
 public class CoreOptions implements Serializable {
+
     public static final String DEFAULT_VALUE_SUFFIX = "default-value";
 
     public static final String FIELDS_PREFIX = "fields";
@@ -115,6 +119,17 @@ public class CoreOptions implements Serializable {
                                     + " 'file.compression.per.level' = '0:lz4,1:zlib', for orc file format, the compression value "
                                     + "could be NONE, ZLIB, SNAPPY, LZO, LZ4, for parquet file format, the compression value could be "
                                     + "UNCOMPRESSED, SNAPPY, GZIP, LZO, BROTLI, LZ4, ZSTD.");
+
+    public static final ConfigOption<Map<String, String>> FILE_FORMAT_PER_LEVEL =
+            key("file.format.per.level")
+                    .mapType()
+                    .defaultValue(new HashMap<>())
+                    .withDescription(
+                            "Define different file format for different level, you can add the conf like this:"
+                                    + " 'file.format.per.level' = '0:avro,3:parquet', if the file format for level is not provided, "
+                                    + "the default format which set by `"
+                                    + FILE_FORMAT.key()
+                                    + "` will be used.");
 
     public static final ConfigOption<String> FILE_COMPRESSION =
             key("file.compression")
@@ -381,13 +396,25 @@ public class CoreOptions implements Serializable {
                             "The field that generates the sequence number for primary key table,"
                                     + " the sequence number determines which data is the most recent.");
 
-    public static final ConfigOption<SequenceAutoPadding> SEQUENCE_AUTO_PADDING =
+    public static final ConfigOption<String> SEQUENCE_AUTO_PADDING =
             key("sequence.auto-padding")
-                    .enumType(SequenceAutoPadding.class)
-                    .defaultValue(SequenceAutoPadding.NONE)
+                    .stringType()
+                    .noDefaultValue()
                     .withDescription(
-                            "Specify the way of padding precision up to micro-second"
-                                    + " if the provided sequence field is used to indicate \"time\" but doesn't meet the precise.");
+                            Description.builder()
+                                    .text(
+                                            "Specify the way of padding precision, if the provided sequence field is used to indicate \"time\" but doesn't meet the precise.")
+                                    .list(
+                                            text("You can specific:"),
+                                            text(
+                                                    "1. \"row-kind-flag\": Pads a bit flag to indicate whether it is retract (0) or add (1) message."),
+                                            text(
+                                                    "2. \"second-to-micro\": Pads the sequence field that indicates time with precision of seconds to micro-second."),
+                                            text(
+                                                    "3. \"millis-to-micro\": Pads the sequence field that indicates time with precision of milli-second to micro-second."),
+                                            text(
+                                                    "4. Composite pattern: for example, \"second-to-micro,row-kind-flag\"."))
+                                    .build());
 
     public static final ConfigOption<StartupMode> SCAN_MODE =
             key("scan.mode")
@@ -612,6 +639,12 @@ public class CoreOptions implements Serializable {
                     .defaultValue(1024)
                     .withDescription("Read batch size for orc and parquet.");
 
+    public static final ConfigOption<Integer> ORC_WRITE_BATCH_SIZE =
+            key("orc.write.batch-size")
+                    .intType()
+                    .defaultValue(1024)
+                    .withDescription("write batch size for orc.");
+
     public static final ConfigOption<String> CONSUMER_ID =
             key("consumer-id")
                     .stringType()
@@ -762,6 +795,44 @@ public class CoreOptions implements Serializable {
                                     + "you need to create this table as a partitioned table in Hive metastore.\n"
                                     + "This config option does not affect the default filesystem metastore.");
 
+    public static final ConfigOption<TagCreationMode> TAG_AUTOMATIC_CREATION =
+            key("tag.automatic-creation")
+                    .enumType(TagCreationMode.class)
+                    .defaultValue(TagCreationMode.NONE)
+                    .withDescription(
+                            "Whether to create tag automatically. And how to generate tags.");
+
+    public static final ConfigOption<TagCreationPeriod> TAG_CREATION_PERIOD =
+            key("tag.creation-period")
+                    .enumType(TagCreationPeriod.class)
+                    .defaultValue(TagCreationPeriod.DAILY)
+                    .withDescription("What frequency is used to generate tags.");
+
+    public static final ConfigOption<Duration> TAG_CREATION_DELAY =
+            key("tag.creation-delay")
+                    .durationType()
+                    .defaultValue(Duration.ofMillis(0))
+                    .withDescription(
+                            "How long is the delay after the period ends before creating a tag."
+                                    + " This can allow some late data to enter the Tag.");
+
+    public static final ConfigOption<Integer> TAG_NUM_RETAINED_MAX =
+            key("tag.num-retained-max")
+                    .intType()
+                    .noDefaultValue()
+                    .withDescription("The maximum number of tags to retain.");
+
+    public static final ConfigOption<String> SINK_WATERMARK_TIME_ZONE =
+            key("sink.watermark-time-zone")
+                    .stringType()
+                    .defaultValue("UTC")
+                    .withDescription(
+                            "The time zone to parse the long watermark value to TIMESTAMP value."
+                                    + " The default value is 'UTC', which means the watermark is defined on TIMESTAMP column or not defined."
+                                    + " If the watermark is defined on TIMESTAMP_LTZ column, the time zone of watermark is user configured time zone,"
+                                    + " the value should be the user configured local time zone. The option value is either a full name"
+                                    + " such as 'America/Los_Angeles', or a custom timezone id such as 'GMT-08:00'.");
+
     private final Options options;
 
     public CoreOptions(Map<String, String> options) {
@@ -840,6 +911,12 @@ public class CoreOptions implements Serializable {
                 .collect(Collectors.toMap(e -> Integer.valueOf(e.getKey()), Map.Entry::getValue));
     }
 
+    public Map<Integer, String> fileFormatPerLevel() {
+        Map<String, String> levelFormats = options.get(FILE_FORMAT_PER_LEVEL);
+        return levelFormats.entrySet().stream()
+                .collect(Collectors.toMap(e -> Integer.valueOf(e.getKey()), Map.Entry::getValue));
+    }
+
     public String fileCompression() {
         return options.get(FILE_COMPRESSION);
     }
@@ -874,6 +951,7 @@ public class CoreOptions implements Serializable {
             int stopNum = numSortedRunStopTrigger();
             maxSortedRunNum = Math.max(stopNum, stopNum + 1);
         }
+        checkArgument(maxSortedRunNum > 1, "The sort spill threshold cannot be smaller than 2.");
         return maxSortedRunNum;
     }
 
@@ -912,6 +990,13 @@ public class CoreOptions implements Serializable {
 
     public long targetFileSize() {
         return options.get(TARGET_FILE_SIZE).getBytes();
+    }
+
+    public long compactionFileSize() {
+        // file size to join the compaction, we don't process on middle file size to avoid
+        // compact a same file twice (the compression is not calculate so accurately. the output
+        // file maybe be less than target file generated by rolling file write).
+        return options.get(TARGET_FILE_SIZE).getBytes() / 10 * 7;
     }
 
     public int numSortedRunCompactionTrigger() {
@@ -1042,8 +1127,12 @@ public class CoreOptions implements Serializable {
         return options.getOptional(SEQUENCE_FIELD);
     }
 
-    public SequenceAutoPadding sequenceAutoPadding() {
-        return options.get(SEQUENCE_AUTO_PADDING);
+    public List<String> sequenceAutoPadding() {
+        String padding = options.get(SEQUENCE_AUTO_PADDING);
+        if (padding == null) {
+            return Collections.emptyList();
+        }
+        return Arrays.asList(padding.split(","));
     }
 
     public WriteMode writeMode() {
@@ -1098,6 +1187,26 @@ public class CoreOptions implements Serializable {
         return options.get(METASTORE_PARTITIONED_TABLE);
     }
 
+    public TagCreationMode tagCreationMode() {
+        return options.get(TAG_AUTOMATIC_CREATION);
+    }
+
+    public TagCreationPeriod tagCreationPeriod() {
+        return options.get(TAG_CREATION_PERIOD);
+    }
+
+    public Duration tagCreationDelay() {
+        return options.get(TAG_CREATION_DELAY);
+    }
+
+    public Integer tagNumRetainedMax() {
+        return options.get(TAG_NUM_RETAINED_MAX);
+    }
+
+    public String sinkWatermarkTimeZone() {
+        return options.get(SINK_WATERMARK_TIME_ZONE);
+    }
+
     public Map<String, String> getFieldDefaultValues() {
         Map<String, String> defaultValues = new HashMap<>();
         String fieldPrefix = FIELDS_PREFIX + ".";
@@ -1126,13 +1235,19 @@ public class CoreOptions implements Serializable {
         return result;
     }
 
+    public int orcWriteBatch() {
+        return options.getInteger(ORC_WRITE_BATCH_SIZE.key(), ORC_WRITE_BATCH_SIZE.defaultValue());
+    }
+
     /** Specifies the merge engine for table with primary key. */
     public enum MergeEngine implements DescribedEnum {
         DEDUPLICATE("deduplicate", "De-duplicate and keep the last row."),
 
         PARTIAL_UPDATE("partial-update", "Partial update non-null fields."),
 
-        AGGREGATE("aggregation", "Aggregate fields with same primary key.");
+        AGGREGATE("aggregation", "Aggregate fields with same primary key."),
+
+        FIRST_ROW("first-row", "De-duplicate and keep the first row.");
 
         private final String value;
         private final String description;
@@ -1530,7 +1645,9 @@ public class CoreOptions implements Serializable {
 
     /** Specifies the way of making up time precision for sequence field. */
     public enum SequenceAutoPadding implements DescribedEnum {
-        NONE("none", "No padding for sequence field."),
+        ROW_KIND_FLAG(
+                "row-kind-flag",
+                "Pads a bit flag to indicate whether it is retract (0) or add (1) message."),
         SECOND_TO_MICRO(
                 "second-to-micro",
                 "Pads the sequence field that indicates time with precision of seconds to micro-second."),
@@ -1542,6 +1659,64 @@ public class CoreOptions implements Serializable {
         private final String description;
 
         SequenceAutoPadding(String value, String description) {
+            this.value = value;
+            this.description = description;
+        }
+
+        @Override
+        public String toString() {
+            return value;
+        }
+
+        @Override
+        public InlineElement getDescription() {
+            return text(description);
+        }
+
+        public static SequenceAutoPadding fromString(String s) {
+            return OptionsUtils.convertToEnum(s, SequenceAutoPadding.class);
+        }
+    }
+
+    /** The mode for tag creation. */
+    public enum TagCreationMode implements DescribedEnum {
+        NONE("none", "No automatically created tags."),
+        PROCESS_TIME(
+                "process-time",
+                "Based on the time of the machine, create TAG once the processing time passes period time plus delay."),
+        WATERMARK(
+                "watermark",
+                "Based on the watermark of the input, create TAG once the watermark passes period time plus delay.");
+
+        private final String value;
+        private final String description;
+
+        TagCreationMode(String value, String description) {
+            this.value = value;
+            this.description = description;
+        }
+
+        @Override
+        public String toString() {
+            return value;
+        }
+
+        @Override
+        public InlineElement getDescription() {
+            return text(description);
+        }
+    }
+
+    /** The period for tag creation. */
+    public enum TagCreationPeriod implements DescribedEnum {
+        DAILY("daily", "Generate a tag every day."),
+        HOURLY("hourly", "Generate a tag every hour."),
+        TWO_HOURS("two-hours", "Generate a tag every two hours.");
+
+        private final String value;
+        private final String description;
+
+        TagCreationPeriod(String value, String description) {
             this.value = value;
             this.description = description;
         }
