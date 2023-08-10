@@ -29,11 +29,6 @@ public class Stream2Paimon {
 //                "    m FLOAT,\n" +
 //                "    n DOUBLE,\n" +
 //                "    o DATE,\n" +
-//                "    p TIME,\n" +
-//                "    p0 TIME(0),\n" +
-//                "    p3 TIME(3),\n" +
-//                "    p6 TIME(6),\n" +
-//                "    p7 TIME(7),\n" +
 //                "    q TIMESTAMP,\n" +
 //                "    q0 TIMESTAMP(0),\n" +
 //                "    q3 TIMESTAMP(3),\n" +
@@ -57,8 +52,8 @@ public class Stream2Paimon {
                 "    'rows-per-second' = '100'\n" +
                 ")\n" +
                 "LIKE `paimon_catalog`.`default`.`tb_all_type` (EXCLUDING ALL)\n").print();
-
-        streamTableEnvironment.executeSql("insert into `paimon_catalog`.`default`.`tb_all_type` select id,a,b,c,d,h,i,j,k,l,m,n,o,p,p0,p3,p6,p7,q,q0,q3,q6,q12,q13,r,r0,r3,r6,r12,r13,DATE_FORMAT(CURRENT_ROW_TIMESTAMP(),'yyyyMMdd'),DATE_FORMAT(CURRENT_ROW_TIMESTAMP(),'HHmm') from GenOrders").print();
+        streamTableEnvironment.executeSql("alter table `paimon_catalog`.`default`.`tb_all_type` partition (dt='1111', hr='222')").print();
+//        streamTableEnvironment.executeSql("insert into `paimon_catalog`.`default`.`tb_all_type` select id,a,b,c,d,h,i,j,k,l,m,n,o,q,q0,q3,q6,q12,q13,r,r0,r3,r6,r12,r13,DATE_FORMAT(CURRENT_ROW_TIMESTAMP(),'yyyyMMdd'),DATE_FORMAT(CURRENT_ROW_TIMESTAMP(),'HHmm') from GenOrders").print();
 //        streamTableEnvironment.executeSql("desc `paimon_catalog`.`default`.`tb_all_type` ").print();
 //
 //        streamTableEnvironment.executeSql("select * from `paimon_catalog`.`default`.`tb_all_type` limit 10").print();

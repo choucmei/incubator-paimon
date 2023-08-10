@@ -19,17 +19,19 @@
 package org.apache.paimon.spark;
 
 import org.apache.paimon.CoreOptions;
+import org.apache.paimon.data.BinaryRow;
+import org.apache.paimon.operation.FileStoreCommit;
 import org.apache.paimon.options.Options;
 import org.apache.paimon.predicate.Predicate;
-import org.apache.paimon.table.DataTable;
-import org.apache.paimon.table.FileStoreTable;
 import org.apache.paimon.table.Table;
-import org.apache.paimon.table.TableUtils;
-
-import org.apache.spark.sql.connector.catalog.SupportsDelete;
-import org.apache.spark.sql.connector.catalog.SupportsRead;
-import org.apache.spark.sql.connector.catalog.SupportsWrite;
-import org.apache.spark.sql.connector.catalog.TableCapability;
+import org.apache.paimon.table.*;
+import org.apache.paimon.table.sink.BatchWriteBuilder;
+import org.apache.paimon.table.source.TableScan;
+import org.apache.paimon.types.RowType;
+import org.apache.spark.sql.catalyst.InternalRow;
+import org.apache.spark.sql.catalyst.analysis.NoSuchPartitionException;
+import org.apache.spark.sql.catalyst.analysis.PartitionsAlreadyExistException;
+import org.apache.spark.sql.connector.catalog.*;
 import org.apache.spark.sql.connector.expressions.FieldReference;
 import org.apache.spark.sql.connector.expressions.IdentityTransform;
 import org.apache.spark.sql.connector.expressions.Transform;
@@ -40,20 +42,16 @@ import org.apache.spark.sql.sources.Filter;
 import org.apache.spark.sql.types.StructType;
 import org.apache.spark.sql.util.CaseInsensitiveStringMap;
 
-import java.util.ArrayList;
-import java.util.Collections;
-import java.util.HashMap;
-import java.util.HashSet;
-import java.util.List;
-import java.util.Map;
-import java.util.Set;
+import java.util.*;
+import java.util.stream.Collectors;
 
 /** A spark {@link org.apache.spark.sql.connector.catalog.Table} for paimon. */
 public class SparkTable
         implements org.apache.spark.sql.connector.catalog.Table,
                 SupportsRead,
                 SupportsWrite,
-                SupportsDelete {
+                SupportsDelete,
+        SupportsPartitionManagement {
 
     private final Table table;
 
@@ -131,5 +129,43 @@ public class SparkTable
         } else {
             return Collections.emptyMap();
         }
+    }
+
+    @Override
+    public StructType partitionSchema() {
+        List<String> partitionKeys = table.partitionKeys();
+        RowType rowType = new RowType(table.rowType().getFields().stream().filter(dataField -> partitionKeys.contains(dataField.name())).collect(Collectors.toList()));
+        return SparkTypeUtils.fromPaimonRowType(rowType);
+    }
+
+    @Override
+    public void createPartition(InternalRow internalRow, Map<String, String> map) throws PartitionsAlreadyExistException, UnsupportedOperationException {
+        throw new UnsupportedOperationException();
+    }
+
+    @Override
+    public boolean dropPartition(InternalRow internalRow) {
+        long identifier = BatchWriteBuilder.COMMIT_IDENTIFIER;
+        FileStoreCommit commit =
+                ((AbstractFileStoreTable) table).store().newCommit(UUID.randomUUID().toString());
+        commit.dropPartitions(new ArrayList<>(), identifier);
+        return false;
+    }
+
+    @Override
+    public void replacePartitionMetadata(InternalRow internalRow, Map<String, String> map) throws NoSuchPartitionException, UnsupportedOperationException {
+        throw new UnsupportedOperationException();
+    }
+
+    @Override
+    public Map<String, String> loadPartitionMetadata(InternalRow internalRow) throws UnsupportedOperationException {
+        throw new UnsupportedOperationException();
+    }
+
+    @Override
+    public InternalRow[] listPartitionIdentifiers(String[] strings, InternalRow internalRow) {
+        TableScan tableScan = table.newReadBuilder().newScan();
+        List<BinaryRow> binaryRows = tableScan.listPartitions();
+        return new InternalRow[0];
     }
 }
