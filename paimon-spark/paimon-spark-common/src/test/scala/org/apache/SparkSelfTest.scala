@@ -14,10 +14,13 @@ object SparkSelfTest {
       .getOrCreate()
     sparkSession.catalog.setCurrentCatalog("paimon")
     sparkSession.catalog.setCurrentDatabase("default")
-    sparkSession.sql("show tables").show()
-    sparkSession.sql("desc tb_all_type").show()
-    sparkSession.sql("alter table `tb_all_type` drop partition (dt='1111', hr='222')").show()
+//    sparkSession.sql("show tables").show()
+//    sparkSession.sql("desc tb_all_type").show()
+//    sparkSession.sql("alter table `tb_all_type` drop partition (dt='20230811', hr='0920')").show()
     sparkSession.sql("show partitions tb_all_type").show()
+//    sparkSession.sql("show partitions tb_all_type PARTITION (dt='20230811')").show()
+//    sparkSession.sql("show partitions tb_all_type PARTITION (dt='20230811', hr='0920')").show()
+//    sparkSession.sql("show partitions tb_all_type PARTITION (hr='0920')").show()
 
     //    sparkSession.sql("desc")
   }

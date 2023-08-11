@@ -34,7 +34,7 @@ import java.util.function.Consumer;
 public class JavaApi {
     public static void main(String[] args) throws Exception {
         Catalog catalog = getCatalog();
-        Identifier identifier = Identifier.create("default", "my_table");
+        Identifier identifier = Identifier.create("default", "tb_all_type");
         Table table = catalog.getTable(identifier);
 //        write(table);
         read(table);
@@ -106,16 +106,7 @@ public class JavaApi {
     }
 
     public static void read(Table table) throws IOException {
-        PredicateBuilder builder =
-                new PredicateBuilder(RowType.of(DataTypes.TIME(), DataTypes.TIME(1), DataTypes.TIME(6), DataTypes.TIME(9)
-                        , DataTypes.TIMESTAMP(1), DataTypes.TIMESTAMP(6), DataTypes.TIMESTAMP(9)
-                        , DataTypes.TIMESTAMP_WITH_LOCAL_TIME_ZONE(1), DataTypes.TIMESTAMP_WITH_LOCAL_TIME_ZONE(6), DataTypes.TIMESTAMP_WITH_LOCAL_TIME_ZONE(9)
-                        , DataTypes.STRING(), DataTypes.STRING(), DataTypes.BIGINT()));
-        Predicate notNull = builder.isNotNull(0);
-        Predicate greaterOrEqual = builder.greaterOrEqual(1, 12);
-
-        ReadBuilder readBuilder = table.newReadBuilder()
-                .withFilter(Lists.newArrayList(notNull, greaterOrEqual));
+        ReadBuilder readBuilder = table.newReadBuilder();
 
         // 2. Plan splits in 'Coordinator' (or named 'Driver')
         List<Split> splits = readBuilder.newScan().plan().splits();
@@ -128,11 +119,11 @@ public class JavaApi {
         reader.forEachRemaining(new Consumer<InternalRow>() {
             @Override
             public void accept(InternalRow internalRow) {
-                int fieldCount = internalRow.getFieldCount();
-                System.out.println(internalRow.getInt(0));
-                System.out.println(internalRow.getInt(1));
-                System.out.println(internalRow.getInt(2));
-                System.out.println(internalRow.getInt(3));
+//                int fieldCount = internalRow.getFieldCount();
+//                System.out.println(internalRow.getInt(0));
+//                System.out.println(internalRow.getInt(1));
+//                System.out.println(internalRow.getInt(2));
+//                System.out.println(internalRow.getInt(3));
                 System.out.println(internalRow);
             }
         });

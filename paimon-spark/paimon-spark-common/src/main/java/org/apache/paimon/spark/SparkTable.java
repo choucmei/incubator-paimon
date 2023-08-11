@@ -26,11 +26,16 @@ import org.apache.paimon.predicate.Predicate;
 import org.apache.paimon.table.Table;
 import org.apache.paimon.table.*;
 import org.apache.paimon.table.sink.BatchWriteBuilder;
+import org.apache.paimon.table.sink.CommitMessage;
 import org.apache.paimon.table.source.TableScan;
+import org.apache.paimon.types.DataField;
 import org.apache.paimon.types.RowType;
+import org.apache.paimon.utils.InternalRowUtils;
+import org.apache.paimon.utils.Preconditions;
 import org.apache.spark.sql.catalyst.InternalRow;
 import org.apache.spark.sql.catalyst.analysis.NoSuchPartitionException;
 import org.apache.spark.sql.catalyst.analysis.PartitionsAlreadyExistException;
+import org.apache.spark.sql.catalyst.expressions.GenericInternalRow;
 import org.apache.spark.sql.connector.catalog.*;
 import org.apache.spark.sql.connector.expressions.FieldReference;
 import org.apache.spark.sql.connector.expressions.IdentityTransform;
@@ -39,18 +44,22 @@ import org.apache.spark.sql.connector.read.ScanBuilder;
 import org.apache.spark.sql.connector.write.LogicalWriteInfo;
 import org.apache.spark.sql.connector.write.WriteBuilder;
 import org.apache.spark.sql.sources.Filter;
+import org.apache.spark.sql.types.StructField;
 import org.apache.spark.sql.types.StructType;
 import org.apache.spark.sql.util.CaseInsensitiveStringMap;
+import scala.collection.Seq;
 
 import java.util.*;
 import java.util.stream.Collectors;
 
-/** A spark {@link org.apache.spark.sql.connector.catalog.Table} for paimon. */
+/**
+ * A spark {@link org.apache.spark.sql.connector.catalog.Table} for paimon.
+ */
 public class SparkTable
         implements org.apache.spark.sql.connector.catalog.Table,
-                SupportsRead,
-                SupportsWrite,
-                SupportsDelete,
+        SupportsRead,
+        SupportsWrite,
+        SupportsDelete,
         SupportsPartitionManagement {
 
     private final Table table;
@@ -145,11 +154,17 @@ public class SparkTable
 
     @Override
     public boolean dropPartition(InternalRow internalRow) {
+        StructType structType = partitionSchema();
+        StructField[] fields = structType.fields();
+        HashMap<String, String> partitions = new HashMap<>();
+        for (int i = 0; i < fields.length; i++) {
+            partitions.put(fields[i].name(), String.valueOf(internalRow.get(i, fields[i].dataType())));
+        }
         long identifier = BatchWriteBuilder.COMMIT_IDENTIFIER;
         FileStoreCommit commit =
                 ((AbstractFileStoreTable) table).store().newCommit(UUID.randomUUID().toString());
-        commit.dropPartitions(new ArrayList<>(), identifier);
-        return false;
+        commit.dropPartitions(Collections.singletonList(partitions), identifier);
+        return true;
     }
 
     @Override
@@ -159,13 +174,44 @@ public class SparkTable
 
     @Override
     public Map<String, String> loadPartitionMetadata(InternalRow internalRow) throws UnsupportedOperationException {
+        long identifier = BatchWriteBuilder.COMMIT_IDENTIFIER;
+        FileStoreCommit commit =
+                ((AbstractFileStoreTable) table).store().newCommit(UUID.randomUUID().toString());
         throw new UnsupportedOperationException();
     }
 
     @Override
-    public InternalRow[] listPartitionIdentifiers(String[] strings, InternalRow internalRow) {
+    public InternalRow[] listPartitionIdentifiers(String[] partitionCols, InternalRow internalRow) {
+        Preconditions.checkState(
+                partitionCols.length == internalRow.numFields(),
+                "Number of partition names (%s) must be equal to " +
+                        "the number of partition values (%s).",
+                partitionCols.length, internalRow.numFields());
+        StructType schema = partitionSchema();
+        Set<String> partitionColNameSet = Arrays.stream(schema.fieldNames()).collect(Collectors.toSet());
+        for (String partitionCol : partitionCols) {
+            Preconditions.checkState(partitionColNameSet.contains(partitionCol),
+                    "Some partition names %s don't belong to " +
+                            "the partition schema '%s'.", partitionCol, schema.sql());
+        }
         TableScan tableScan = table.newReadBuilder().newScan();
         List<BinaryRow> binaryRows = tableScan.listPartitions();
-        return new InternalRow[0];
+        return binaryRows.stream().map(binaryRow -> {
+            // convert binaryRow to SparkInternalRow
+            SparkInternalRow sparkInternalRow = new SparkInternalRow((RowType) SparkTypeUtils.toPaimonType(schema));
+            return sparkInternalRow.replace(binaryRow);
+        }).filter(sparkInternalRow -> {
+            // filter partitions not specified by the user
+            if (partitionCols.length != 0) {
+                for (int i = 0; i < partitionCols.length; i++) {
+                    int schemaIndex = schema.fieldIndex(partitionCols[i]);
+                    StructField apply = schema.apply(schemaIndex);
+                    if (!sparkInternalRow.get(schemaIndex, apply.dataType()).equals(internalRow.get(i, apply.dataType()))) {
+                        return false;
+                    }
+                }
+            }
+            return true;
+        }).toArray(InternalRow[]::new);
     }
 }
