@@ -23,12 +23,16 @@ import org.apache.paimon.data.BinaryRow;
 import org.apache.paimon.operation.FileStoreCommit;
 import org.apache.paimon.options.Options;
 import org.apache.paimon.predicate.Predicate;
+import org.apache.paimon.predicate.PredicateBuilder;
 import org.apache.paimon.table.Table;
 import org.apache.paimon.table.*;
+import org.apache.paimon.table.sink.BatchTableWrite;
 import org.apache.paimon.table.sink.BatchWriteBuilder;
 import org.apache.paimon.table.sink.CommitMessage;
+import org.apache.paimon.table.source.InnerTableRead;
 import org.apache.paimon.table.source.TableScan;
 import org.apache.paimon.types.DataField;
+import org.apache.paimon.types.DataType;
 import org.apache.paimon.types.RowType;
 import org.apache.paimon.utils.InternalRowUtils;
 import org.apache.paimon.utils.Preconditions;
@@ -174,9 +178,6 @@ public class SparkTable
 
     @Override
     public Map<String, String> loadPartitionMetadata(InternalRow internalRow) throws UnsupportedOperationException {
-        long identifier = BatchWriteBuilder.COMMIT_IDENTIFIER;
-        FileStoreCommit commit =
-                ((AbstractFileStoreTable) table).store().newCommit(UUID.randomUUID().toString());
         throw new UnsupportedOperationException();
     }
 

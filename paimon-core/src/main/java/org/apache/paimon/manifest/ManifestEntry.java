@@ -40,6 +40,18 @@ import static org.apache.paimon.utils.SerializationUtils.newBytesType;
 public class ManifestEntry {
 
     private final FileKind kind;
+
+    @Override
+    public String toString() {
+        return "ManifestEntry{" +
+                "kind=" + kind +
+                ", partition=" + partition +
+                ", bucket=" + bucket +
+                ", totalBuckets=" + totalBuckets +
+                ", file=" + file +
+                '}';
+    }
+
     // for tables without partition this field should be a row with 0 columns (not null)
     private final BinaryRow partition;
     private final int bucket;
@@ -105,11 +117,6 @@ public class ManifestEntry {
     @Override
     public int hashCode() {
         return Objects.hash(kind, partition, bucket, totalBuckets, file);
-    }
-
-    @Override
-    public String toString() {
-        return String.format("{%s, %s, %d, %d, %s}", kind, partition, bucket, totalBuckets, file);
     }
 
     public static Collection<ManifestEntry> mergeEntries(Iterable<ManifestEntry> entries) {

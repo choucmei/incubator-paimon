@@ -50,6 +50,19 @@ public class ManifestFileMeta {
 
     private final String fileName;
     private final long fileSize;
+
+    @Override
+    public String toString() {
+        return "ManifestFileMeta{" +
+                "fileName='" + fileName + '\'' +
+                ", fileSize=" + fileSize +
+                ", numAddedFiles=" + numAddedFiles +
+                ", numDeletedFiles=" + numDeletedFiles +
+                ", partitionStats=" + partitionStats +
+                ", schemaId=" + schemaId +
+                '}';
+    }
+
     private final long numAddedFiles;
     private final long numDeletedFiles;
     private final BinaryTableStats partitionStats;
@@ -122,13 +135,6 @@ public class ManifestFileMeta {
     @Override
     public int hashCode() {
         return Objects.hash(
-                fileName, fileSize, numAddedFiles, numDeletedFiles, partitionStats, schemaId);
-    }
-
-    @Override
-    public String toString() {
-        return String.format(
-                "{%s, %d, %d, %d, %s, %d}",
                 fileName, fileSize, numAddedFiles, numDeletedFiles, partitionStats, schemaId);
     }
 

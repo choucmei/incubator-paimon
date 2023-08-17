@@ -6,7 +6,7 @@ import org.apache.flink.table.api.bridge.java.StreamTableEnvironment;
 public class Stream2Paimon {
     public static void main(String[] args) {
         StreamExecutionEnvironment executionEnvironment = StreamExecutionEnvironment.getExecutionEnvironment();
-        executionEnvironment.getCheckpointConfig().setCheckpointInterval(1000 * 30);
+        executionEnvironment.getCheckpointConfig().setCheckpointInterval(1000 * 60);
         StreamTableEnvironment streamTableEnvironment = StreamTableEnvironment.create(executionEnvironment);
         streamTableEnvironment.executeSql("CREATE CATALOG paimon_catalog WITH (\n" +
                 "    'type'='paimon',\n" +

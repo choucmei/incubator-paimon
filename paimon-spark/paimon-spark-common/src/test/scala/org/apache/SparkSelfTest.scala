@@ -16,11 +16,13 @@ object SparkSelfTest {
     sparkSession.catalog.setCurrentDatabase("default")
 //    sparkSession.sql("show tables").show()
 //    sparkSession.sql("desc tb_all_type").show()
-//    sparkSession.sql("alter table `tb_all_type` drop partition (dt='20230811', hr='0920')").show()
-    sparkSession.sql("show partitions tb_all_type").show()
-//    sparkSession.sql("show partitions tb_all_type PARTITION (dt='20230811')").show()
-//    sparkSession.sql("show partitions tb_all_type PARTITION (dt='20230811', hr='0920')").show()
-//    sparkSession.sql("show partitions tb_all_type PARTITION (hr='0920')").show()
+//    sparkSession.sql("alter table `tb_all_type` drop partition (dt='20230814', hr='1034')").show()
+//    sparkSession.sql("ALTER TABLE tb_all_type ADD PARTITION (dt='20230000', hr='000')").show()
+//    sparkSession.sql("show partitions tb_all_type").show()
+    sparkSession.sql("show partitions tb_all_type PARTITION (dt='20230814', hr='1034')").show()
+
+    sparkSession.sql("show partitions tb_all_type PARTITION (dt='20230811')").show()
+    sparkSession.sql("show partitions tb_all_type PARTITION (hr='0920')").show()
 
     //    sparkSession.sql("desc")
   }

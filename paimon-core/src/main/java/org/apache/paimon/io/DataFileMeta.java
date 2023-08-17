@@ -289,21 +289,21 @@ public class DataFileMeta {
 
     @Override
     public String toString() {
-        return String.format(
-                "{%s, %d, %d, %s, %s, %s, %s, %d, %d, %d, %d, %s, %s}",
-                fileName,
-                fileSize,
-                rowCount,
-                minKey,
-                maxKey,
-                keyStats,
-                valueStats,
-                minSequenceNumber,
-                maxSequenceNumber,
-                schemaId,
-                level,
-                extraFiles,
-                creationTime);
+        return "DataFileMeta{" +
+                "fileName='" + fileName + '\'' +
+                ", fileSize=" + fileSize +
+                ", rowCount=" + rowCount +
+                ", minKey=" + minKey +
+                ", maxKey=" + maxKey +
+                ", keyStats=" + keyStats +
+                ", valueStats=" + valueStats +
+                ", minSequenceNumber=" + minSequenceNumber +
+                ", maxSequenceNumber=" + maxSequenceNumber +
+                ", schemaId=" + schemaId +
+                ", level=" + level +
+                ", extraFiles=" + extraFiles +
+                ", creationTime=" + creationTime +
+                '}';
     }
 
     public static RowType schema() {
