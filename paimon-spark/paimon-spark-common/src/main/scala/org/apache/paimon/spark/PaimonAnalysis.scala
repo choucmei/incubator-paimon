@@ -17,9 +17,13 @@
  */
 package org.apache.paimon.spark
 
+import org.apache.paimon.table.FileStoreTable
 import org.apache.spark.sql.SparkSession
+import org.apache.spark.sql.catalyst.plans.logical.{LogicalPlan, MergeIntoTable, OverwritePartitionsDynamic}
 import org.apache.spark.sql.catalyst.plans.logical.LogicalPlan
 import org.apache.spark.sql.catalyst.rules.Rule
+import org.apache.spark.sql.execution.datasources.v2.DataSourceV2Relation
+import org.apache.spark.sql.paimon.commands.{PaimonDynamicPartitionOverwriteCommand, PaimonMergeIntoCommand}
 
 class PaimonAnalysis(session: SparkSession) extends Rule[LogicalPlan] {
 
@@ -28,6 +32,24 @@ class PaimonAnalysis(session: SparkSession) extends Rule[LogicalPlan] {
     case func: PaimonTableValueFunction if func.args.forall(_.resolved) =>
       PaimonTableValuedFunctions.resolvePaimonTableValuedFunction(session, func)
 
-  }
+    case o@OverwritePartitionsDynamicPaimon(r, d) if o.resolved =>
+      PaimonDynamicPartitionOverwriteCommand(r, d, o.query, o.writeOptions, o.isByName)
 
+    case m@MergeIntoTable(target, _, _, _, _, _) if m.resolved && PaimonMergeIntoCommand.isPaimonTable(target) => PaimonMergeIntoCommand(m)
+
+  }
+}
+
+object OverwritePartitionsDynamicPaimon {
+  def unapply(o: OverwritePartitionsDynamic): Option[(DataSourceV2Relation, FileStoreTable)] = {
+    if (o.query.resolved) {
+      o.table match {
+        case r: DataSourceV2Relation if r.table.isInstanceOf[SparkTable] =>
+          Some((r, r.table.asInstanceOf[SparkTable].getTable.asInstanceOf[FileStoreTable]))
+        case _ => None
+      }
+    } else {
+      None
+    }
+  }
 }

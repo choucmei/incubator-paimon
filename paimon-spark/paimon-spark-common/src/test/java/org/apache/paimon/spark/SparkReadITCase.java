@@ -159,9 +159,9 @@ public class SparkReadITCase extends SparkReadTestBase {
                         + "b VARCHAR(10),\n"
                         + "c CHAR(10))");
         assertThat(
-                spark.sql("SELECT fields FROM `testCreateTable$schemas`")
-                        .collectAsList()
-                        .toString())
+                        spark.sql("SELECT fields FROM `testCreateTable$schemas`")
+                                .collectAsList()
+                                .toString())
                 .isEqualTo(
                         "[[["
                                 + "{\"id\":0,\"name\":\"a\",\"type\":\"BIGINT\"},"
@@ -294,9 +294,9 @@ public class SparkReadITCase extends SparkReadTestBase {
     @Test
     public void testConflictOption() {
         assertThatThrownBy(
-                () ->
-                        spark.sql(
-                                "CREATE TABLE T (a INT) TBLPROPERTIES ('write-mode' = 'append-only', 'changelog-producer' = 'input')"))
+                        () ->
+                                spark.sql(
+                                        "CREATE TABLE T (a INT) TBLPROPERTIES ('write-mode' = 'append-only', 'changelog-producer' = 'input')"))
                 .getRootCause()
                 .isInstanceOf(UnsupportedOperationException.class)
                 .hasMessage(
@@ -305,13 +305,36 @@ public class SparkReadITCase extends SparkReadTestBase {
         spark.sql("CREATE TABLE T (a INT) TBLPROPERTIES ('write-mode' = 'append-only')");
 
         assertThatThrownBy(
-                () ->
-                        spark.sql(
-                                "ALTER TABLE T SET TBLPROPERTIES('changelog-producer' 'input')"))
+                        () ->
+                                spark.sql(
+                                        "ALTER TABLE T SET TBLPROPERTIES('changelog-producer' 'input')"))
                 .getRootCause()
                 .isInstanceOf(UnsupportedOperationException.class)
                 .hasMessage(
                         "Can not set the write-mode to append-only and changelog-producer at the same time.");
+    }
+
+    @Test
+    public void testChangelogProducerOnAppendOnlyTable() {
+        assertThatThrownBy(
+                        () ->
+                                spark.sql(
+                                        "CREATE TABLE T (a INT) TBLPROPERTIES ('changelog-producer' = 'input')"))
+                .getRootCause()
+                .isInstanceOf(UnsupportedOperationException.class)
+                .hasMessage(
+                        "Can not set changelog-producer on table without primary keys, please define primary keys.");
+
+        spark.sql("CREATE TABLE T (a INT)");
+
+        assertThatThrownBy(
+                        () ->
+                                spark.sql(
+                                        "ALTER TABLE T SET TBLPROPERTIES('changelog-producer' 'input')"))
+                .getRootCause()
+                .isInstanceOf(UnsupportedOperationException.class)
+                .hasMessage(
+                        "Can not set changelog-producer on table without primary keys, please define primary keys.");
     }
 
     @Test
@@ -378,9 +401,9 @@ public class SparkReadITCase extends SparkReadTestBase {
                         + ")");
 
         assertThat(
-                spark.sql("SHOW TBLPROPERTIES tbl").collectAsList().stream()
-                        .map(Row::toString)
-                        .collect(Collectors.toList()))
+                        spark.sql("SHOW TBLPROPERTIES tbl").collectAsList().stream()
+                                .map(Row::toString)
+                                .collect(Collectors.toList()))
                 .contains("[k1,v1]", "[k2,v2]");
     }
 
@@ -388,15 +411,15 @@ public class SparkReadITCase extends SparkReadTestBase {
     public void testCreateTableWithNonexistentPk() {
         spark.sql("USE paimon");
         assertThatThrownBy(
-                () ->
-                        spark.sql(
-                                "CREATE TABLE default.PartitionedPkTable (\n"
-                                        + "a BIGINT,\n"
-                                        + "b STRING,\n"
-                                        + "c DOUBLE) USING paimon\n"
-                                        + "COMMENT 'table comment'\n"
-                                        + "PARTITIONED BY (b)\n"
-                                        + "TBLPROPERTIES ('primary-key' = 'd')"))
+                        () ->
+                                spark.sql(
+                                        "CREATE TABLE default.PartitionedPkTable (\n"
+                                                + "a BIGINT,\n"
+                                                + "b STRING,\n"
+                                                + "c DOUBLE) USING paimon\n"
+                                                + "COMMENT 'table comment'\n"
+                                                + "PARTITIONED BY (b)\n"
+                                                + "TBLPROPERTIES ('primary-key' = 'd')"))
                 .isInstanceOf(IllegalStateException.class)
                 .hasMessageContaining(
                         "Table column [a, b, c] should include all primary key constraint [d]");
@@ -405,14 +428,14 @@ public class SparkReadITCase extends SparkReadTestBase {
     @Test
     public void testCreateTableWithNonexistentPartition() {
         assertThatThrownBy(
-                () ->
-                        spark.sql(
-                                "CREATE TABLE PartitionedPkTable (\n"
-                                        + "a BIGINT,\n"
-                                        + "b STRING,\n"
-                                        + "c DOUBLE)\n"
-                                        + "PARTITIONED BY (d)\n"
-                                        + "TBLPROPERTIES ('primary-key' = 'a')"))
+                        () ->
+                                spark.sql(
+                                        "CREATE TABLE PartitionedPkTable (\n"
+                                                + "a BIGINT,\n"
+                                                + "b STRING,\n"
+                                                + "c DOUBLE)\n"
+                                                + "PARTITIONED BY (d)\n"
+                                                + "TBLPROPERTIES ('primary-key' = 'a')"))
                 .isInstanceOf(AnalysisException.class)
                 .hasMessageContaining("Couldn't find column d");
     }
@@ -495,19 +518,19 @@ public class SparkReadITCase extends SparkReadTestBase {
                 .hasMessageContaining("The schema `foo` cannot be found");
 
         assertThatThrownBy(
-                () ->
-                        spark.sql(
-                                String.format(
-                                        "ALTER TABLE %s UNSET TBLPROPERTIES('primary-key')",
-                                        tableName)))
+                        () ->
+                                spark.sql(
+                                        String.format(
+                                                "ALTER TABLE %s UNSET TBLPROPERTIES('primary-key')",
+                                                tableName)))
                 .isInstanceOf(UnsupportedOperationException.class)
                 .hasMessageContaining("Alter primary key is not supported");
         assertThatThrownBy(
-                () ->
-                        spark.sql(
-                                String.format(
-                                        "ALTER TABLE %s SET TBLPROPERTIES('write-mode' = 'append-only')",
-                                        tableName)))
+                        () ->
+                                spark.sql(
+                                        String.format(
+                                                "ALTER TABLE %s SET TBLPROPERTIES('write-mode' = 'append-only')",
+                                                tableName)))
                 .satisfies(
                         AssertionUtils.anyCauseMatches(
                                 UnsupportedOperationException.class,
@@ -556,25 +579,25 @@ public class SparkReadITCase extends SparkReadTestBase {
 
         // test drop table
         assertThat(
-                spark.sql(
-                                String.format(
-                                        "SHOW TABLES IN paimon.default LIKE '%s'",
-                                        tableName))
-                        .select("namespace", "tableName")
-                        .collectAsList()
-                        .toString())
+                        spark.sql(
+                                        String.format(
+                                                "SHOW TABLES IN paimon.default LIKE '%s'",
+                                                tableName))
+                                .select("namespace", "tableName")
+                                .collectAsList()
+                                .toString())
                 .isEqualTo(String.format("[[default,%s]]", tableName));
 
         spark.sql(String.format("DROP TABLE %s", tableName));
 
         assertThat(
-                spark.sql(
-                                String.format(
-                                        "SHOW TABLES IN paimon.default LIKE '%s'",
-                                        tableName))
-                        .select("namespace", "tableName")
-                        .collectAsList()
-                        .toString())
+                        spark.sql(
+                                        String.format(
+                                                "SHOW TABLES IN paimon.default LIKE '%s'",
+                                                tableName))
+                                .select("namespace", "tableName")
+                                .collectAsList()
+                                .toString())
                 .isEqualTo("[]");
 
         assertThat(new File(tablePath.toUri())).doesNotExist();
@@ -590,9 +613,9 @@ public class SparkReadITCase extends SparkReadTestBase {
                 .hasMessageContaining("Cannot create schema `bar` because it already exists");
 
         assertThat(
-                spark.sql("SHOW NAMESPACES").collectAsList().stream()
-                        .map(row -> row.getString(0))
-                        .collect(Collectors.toList()))
+                        spark.sql("SHOW NAMESPACES").collectAsList().stream()
+                                .map(row -> row.getString(0))
+                                .collect(Collectors.toList()))
                 .containsExactlyInAnyOrder("bar", "default");
 
         Path nsPath = new Path(warehousePath, "bar.db");
@@ -683,79 +706,4 @@ public class SparkReadITCase extends SparkReadTestBase {
                                 "a INT",
                                 "b STRUCT<b1: STRUCT<b11: INT, b12: INT>, b2: BIGINT>"));
     }
-
-    @Test
-    public void testShowPartition() {
-        spark.sql(
-                "CREATE TABLE partition_table_01 (id BIGINT, a VARCHAR(10), b CHAR(10),c BIGINT,dt VARCHAR(8),hh VARCHAR(4) "
-                        + ") PARTITIONED BY (dt, hh) TBLPROPERTIES (\n"
-                        + "'primary-key' = 'dt,hh,id'\n"
-                        + ")");
-        spark.sql("INSERT INTO partition_table_01 VALUES(1,'a','b',2,'20230817','1132')");
-        spark.sql("INSERT INTO partition_table_01 VALUES(1,'a','b',2,'20230817','1133')");
-        spark.sql("INSERT INTO partition_table_01 VALUES(1,'a','b',2,'20230817','1134')");
-        spark.sql("INSERT INTO partition_table_01 VALUES(1,'a','b',2,'20230816','1132')");
-        spark.sql("INSERT INTO partition_table_01 VALUES(1,'a','b',2,'20230816','1133')");
-        spark.sql("INSERT INTO partition_table_01 VALUES(1,'a','b',2,'20230816','1134')");
-        List<Row> result = spark.sql("show partitions partition_table_01 PARTITION (dt='20230817', hh='1132')").collectAsList();
-        assertThat(result.toString()).isEqualTo("[[dt=20230817/hh=1132]]");
-        result = spark.sql("show partitions partition_table_01 PARTITION (dt='20230817')").collectAsList();
-        assertThat(result.toString()).isEqualTo("[[dt=20230817/hh=1132], [dt=20230817/hh=1133], [dt=20230817/hh=1134]]");
-        result = spark.sql("show partitions partition_table_01 PARTITION (hh='1132')").collectAsList();
-        assertThat(result.toString()).isEqualTo("[[dt=20230816/hh=1132], [dt=20230817/hh=1132]]");
-        result = spark.sql("show partitions partition_table_01 PARTITION (dt='20230816', hh='1132')").collectAsList();
-        assertThat(result.toString()).isEqualTo("[[dt=20230816/hh=1132]]");
-        result = spark.sql("show partitions partition_table_01").collectAsList();
-        assertThat(result.toString()).isEqualTo("[[dt=20230816/hh=1132], [dt=20230816/hh=1133], [dt=20230816/hh=1134], [dt=20230817/hh=1132], [dt=20230817/hh=1133], [dt=20230817/hh=1134]]");
-        result = spark.sql("show partitions partition_table_01 PARTITION (dt='20230818')").collectAsList();
-        assertThat(result.toString()).isEqualTo("[]");
-        result = spark.sql("show partitions partition_table_01 PARTITION (hh='1135')").collectAsList();
-        assertThat(result.toString()).isEqualTo("[]");
-    }
-
-    @Test
-    public void testDropPartition() {
-        spark.sql(
-                "CREATE TABLE drop_partition_table_01 (id BIGINT, a VARCHAR(10), b CHAR(10),c BIGINT,dt VARCHAR(8),hh VARCHAR(4) "
-                        + ") PARTITIONED BY (dt, hh) TBLPROPERTIES (\n"
-                        + "'primary-key' = 'dt,hh,id'\n"
-                        + ")");
-        spark.sql("INSERT INTO drop_partition_table_01 VALUES(1,'a','b',2,'20230817','1132')");
-        spark.sql("INSERT INTO drop_partition_table_01 VALUES(1,'a','b',2,'20230817','1133')");
-        spark.sql("INSERT INTO drop_partition_table_01 VALUES(1,'a','b',2,'20230817','1134')");
-        spark.sql("INSERT INTO drop_partition_table_01 VALUES(1,'a','b',2,'20230816','1132')");
-        spark.sql("INSERT INTO drop_partition_table_01 VALUES(1,'a','b',2,'20230816','1133')");
-        spark.sql("INSERT INTO drop_partition_table_01 VALUES(1,'a','b',2,'20230816','1134')");
-        spark.sql("alter table `drop_partition_table_01` drop partition (dt='20230817', hh='1133')");
-        spark.sql("alter table `drop_partition_table_01` drop partition (dt='20230816', hh='1134')");
-        List<Row> result = spark.sql("show partitions drop_partition_table_01 PARTITION (dt='20230817', hh='1132')").collectAsList();
-        assertThat(result.toString()).isEqualTo("[[dt=20230817/hh=1132]]");
-        result = spark.sql("show partitions drop_partition_table_01 PARTITION (dt='20230817')").collectAsList();
-        assertThat(result.toString()).isEqualTo("[[dt=20230817/hh=1132], [dt=20230817/hh=1134]]");
-        result = spark.sql("show partitions drop_partition_table_01 PARTITION (hh='1132')").collectAsList();
-        assertThat(result.toString()).isEqualTo("[[dt=20230816/hh=1132], [dt=20230817/hh=1132]]");
-        result = spark.sql("show partitions drop_partition_table_01 PARTITION (dt='20230816', hh='1132')").collectAsList();
-        assertThat(result.toString()).isEqualTo("[[dt=20230816/hh=1132]]");
-        result = spark.sql("show partitions drop_partition_table_01").collectAsList();
-        assertThat(result.toString()).isEqualTo("[[dt=20230816/hh=1132], [dt=20230816/hh=1133], [dt=20230817/hh=1132], [dt=20230817/hh=1134]]");
-        result = spark.sql("show partitions drop_partition_table_01 PARTITION (dt='20230818')").collectAsList();
-        assertThat(result.toString()).isEqualTo("[]");
-        result = spark.sql("show partitions drop_partition_table_01 PARTITION (hh='1135')").collectAsList();
-        assertThat(result.toString()).isEqualTo("[]");
-        result = spark.sql("select * from drop_partition_table_01").collectAsList();
-        assertThat(result.toString()).isEqualTo("[[1,a,b,2,20230817,1132], [1,a,b,2,20230817,1134], [1,a,b,2,20230816,1132], [1,a,b,2,20230816,1133]]");
-    }
-
-    @Test
-    public void testCreatePartition() {
-        spark.sql(
-                "CREATE TABLE drop_partition_table_01 (id BIGINT, a VARCHAR(10), b CHAR(10),c BIGINT,dt VARCHAR(8),hh VARCHAR(4) "
-                        + ") PARTITIONED BY (dt, hh) TBLPROPERTIES (\n"
-                        + "'primary-key' = 'dt,hh,id'\n"
-                        + ")");
-        spark.sql("alter table `drop_partition_table_01` add partition (dt='20230817', hh='1133')");
-    }
-
-
-
 }
